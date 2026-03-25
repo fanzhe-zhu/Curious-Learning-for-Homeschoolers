@@ -29,6 +29,20 @@ const SAMPLE_CHIPS = [
 let _nextId = 0
 const uid = () => ++_nextId
 
+// ─── Input Classification ─────────────────────────────────────────────────────
+
+const QUESTION_START = /^(what|why|how|who|when|where)\b/i
+const SUMMARY_START  = /^(so\b|i think\b|that means\b)/i
+
+/** Returns 'question' | 'summary' | 'passive' */
+function classifyInput(text) {
+  const t = text.trim()
+  if (!t) return 'passive'
+  if (QUESTION_START.test(t) || t.endsWith('?')) return 'question'
+  if (SUMMARY_START.test(t)) return 'summary'
+  return 'passive'
+}
+
 // ─── Tree Helpers ─────────────────────────────────────────────────────────────
 
 function shortLabel(q) {
@@ -92,13 +106,13 @@ function EmptyTreeIllustration() {
   )
 }
 
-function NewBadge() {
+function UnlockedBadge() {
   return (
     <span
-      className="ml-auto flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-600 border border-yellow-200"
+      className="ml-auto flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200"
       style={{ animation: 'badgeFade 2s forwards' }}
     >
-      ✨ new
+      🔓 Unlocked!
     </span>
   )
 }
@@ -145,7 +159,7 @@ function TreeNode({ node, depth, isLast }) {
             <span className={`text-xs font-medium leading-snug flex-1 truncate ${c.text}`}>
               {node.label}
             </span>
-            {node.isNew && <NewBadge />}
+            {node.isNew && <UnlockedBadge />}
           </div>
 
           {/* Children */}
@@ -360,6 +374,19 @@ function ChatPanel({ messages, thinking, onSend }) {
 
       {/* Input bar */}
       <div className="p-4 bg-white/80 backdrop-blur border-t border-slate-100">
+        {/* Dynamic hint label */}
+        {(() => {
+          const kind = classifyInput(input)
+          const hint =
+            kind === 'question' ? { text: '✨ New topic detected', cls: 'text-violet-500' } :
+            kind === 'summary'  ? { text: '💡 Summary detected',   cls: 'text-green-600'  } :
+            { text: 'Reply to owl...', cls: 'text-slate-400' }
+          return (
+            <p className={`text-xs font-medium mb-1.5 transition-colors duration-300 ${hint.cls}`}>
+              {hint.text}
+            </p>
+          )
+        })()}
         <form
           onSubmit={e => { e.preventDefault(); send() }}
           className="flex items-center gap-3"
@@ -412,14 +439,16 @@ export default function App() {
     setMessages(prev => [...prev, { id: uid(), role: 'user', content: text }])
     setThinking(true)
 
-    // Add tree node
-    const nodeId  = uid()
-    const newNode = { id: nodeId, label: shortLabel(text), isNew: true, children: [] }
-    setNodes(prev => insertNode(prev, activeId, newNode))
-    setActiveId(nodeId)
-
-    // Badge fades via CSS; clear isNew from state after 2s
-    setTimeout(() => setNodes(prev => clearNew(prev, nodeId)), 2000)
+    // Only unlock a new node for active output (question or summary)
+    const kind = classifyInput(text)
+    if (kind === 'question' || kind === 'summary') {
+      const nodeId  = uid()
+      const newNode = { id: nodeId, label: shortLabel(text), isNew: true, children: [] }
+      setNodes(prev => insertNode(prev, activeId, newNode))
+      setActiveId(nodeId)
+      // Badge fades via CSS animation; clear isNew flag from state after 2s
+      setTimeout(() => setNodes(prev => clearNew(prev, nodeId)), 2000)
+    }
 
     // Owl reply after 1.5s
     const idx = responseIdx.current++
